@@ -176,13 +176,7 @@ func verify(wg *sync.WaitGroup) {
 		panic(err)
 	}
 
-	// _, err = db.Query("SET @@tidb_multi_statement_mode='ON'")
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	query1 := "set @@session.tidb_isolation_read_engines='tiflash'; select count(*) from rpt_sdb_account_agent_trans_d"
-	query2 := "set @@session.tidb_isolation_read_engines='tikv'; select count(*) from rpt_sdb_account_agent_trans_d"
+	query := "select count(*) from rpt_sdb_account_agent_trans_d"
 	for {
 		tx, err := db.Begin()
 		if err != nil {
@@ -190,11 +184,19 @@ func verify(wg *sync.WaitGroup) {
 		}
 		var totalTiFlash = -1
 		var totalTiKV = -2
-		err = tx.QueryRow(query1).Scan(&totalTiFlash)
+		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
 		if err != nil {
 			panic(err)
 		}
-		err = tx.QueryRow(query2).Scan(&totalTiKV)
+		err = tx.QueryRow(query).Scan(&totalTiFlash)
+		if err != nil {
+			panic(err)
+		}
+		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
+		if err != nil {
+			panic(err)
+		}
+		err = tx.QueryRow(query).Scan(&totalTiKV)
 		if err != nil {
 			panic(err)
 		}
