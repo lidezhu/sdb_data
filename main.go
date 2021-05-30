@@ -339,24 +339,30 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 		if err != nil {
 			panic(err)
 		}
+		var tso int
+		if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err != nil {
+			panic(err)
+		}
+
 		var totalTiFlash = -1
 		var totalTiKV = -1
-		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
+		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
 		if err != nil {
 			panic(err)
 		}
-		err = tx.QueryRow(query).Scan(&totalTiFlash)
+		err = tx.QueryRow(query).Scan(&totalTiKV)
 		if err != nil {
 			tx.Rollback()
 			log.Warn(err)
 			meetError = true
 		}
+
 		if !meetError {
-			_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
+			_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
 			if err != nil {
 				panic(err)
 			}
-			err = tx.QueryRow(query).Scan(&totalTiKV)
+			err = tx.QueryRow(query).Scan(&totalTiFlash)
 			if err != nil {
 				tx.Rollback()
 				log.Warn(err)
@@ -366,10 +372,10 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 		}
 
 		if !meetError && totalTiFlash != totalTiKV {
-			fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d\n", totalTiFlash, totalTiKV, threadId)
+			fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d tso %d\n", totalTiFlash, totalTiKV, threadId, tso)
 			panic("error")
 		} else {
-			fmt.Printf("tiflash result %d, tikv result %d thread %d\n", totalTiFlash, totalTiKV, threadId)
+			fmt.Printf("tiflash result %d, tikv result %d thread %d tso %d\n", totalTiFlash, totalTiKV, threadId, tso)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
