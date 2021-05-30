@@ -157,9 +157,19 @@ func updateTable(db *sql.DB, wg *sync.WaitGroup) {
 	}
 }
 
-func verify(db *sql.DB) {
+func verify(wg *sync.WaitGroup) {
+	defer wg.Done()
+	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
+	if err != nil {
+		panic(err)
+	}
 	// disable batch cop
-	_, err := db.Query("set @@tidb_allow_batch_cop = 0;")
+	_, err = db.Query("set @@tidb_allow_batch_cop = 0;")
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = db.Query("SET @@tidb_multi_statement_mode='ON'")
 	if err != nil {
 		panic(err)
 	}
@@ -201,11 +211,6 @@ func main() {
 	defer db.Close()
 	db.SetConnMaxLifetime(time.Minute * 30)
 
-	_, err = db.Query("SET @@tidb_multi_statement_mode='ON'")
-	if err != nil {
-		panic(err)
-	}
-
 	if *update {
 		err = createTable(db)
 		if err != nil {
@@ -224,6 +229,15 @@ func main() {
 		fmt.Println("Main: Completed")
 	} else {
 		fmt.Println("begin to verify")
-		verify(db)
+		var wg sync.WaitGroup
+
+		for i := 0; i < *thread; i++ {
+			fmt.Println("Main: Starting worker", i)
+			wg.Add(1)
+			go verify(&wg)
+		}
+		fmt.Println("Main: Waiting for workers to finish")
+		wg.Wait()
+		fmt.Println("Main: Completed")
 	}
 }
