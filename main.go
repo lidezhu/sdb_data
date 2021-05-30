@@ -319,7 +319,7 @@ func stableUpdateTable(wg *sync.WaitGroup) {
 	}
 }
 
-func verify(wg *sync.WaitGroup, tableName string) {
+func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 	defer wg.Done()
 	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
 	if err != nil {
@@ -334,12 +334,13 @@ func verify(wg *sync.WaitGroup, tableName string) {
 
 	query := fmt.Sprintf("select count(*) from %s", tableName)
 	for {
+		meetError := false
 		tx, err := db.Begin()
 		if err != nil {
 			panic(err)
 		}
 		var totalTiFlash = -1
-		var totalTiKV = -2
+		var totalTiKV = -1
 		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
 		if err != nil {
 			panic(err)
@@ -348,8 +349,7 @@ func verify(wg *sync.WaitGroup, tableName string) {
 		if err != nil {
 			tx.Rollback()
 			log.Warn(err)
-			time.Sleep(1 * time.Second)
-			continue
+			meetError = true
 		}
 		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
 		if err != nil {
@@ -359,13 +359,14 @@ func verify(wg *sync.WaitGroup, tableName string) {
 		if err != nil {
 			tx.Rollback()
 			log.Warn(err)
-			time.Sleep(1 * time.Second)
-			continue
+			meetError = true
 		}
 		tx.Commit()
-		fmt.Printf("tiflash result %d, tikv result %d\n", totalTiFlash, totalTiKV)
-		if totalTiFlash != totalTiKV {
-			fmt.Printf("tiflash result %d, tikv result %d is not consisten\n", totalTiFlash, totalTiKV)
+		if !meetError && totalTiFlash != totalTiKV {
+			fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d\n", totalTiFlash, totalTiKV, threadId)
+			panic("error")
+		} else {
+			fmt.Printf("tiflash result %d, tikv result %d thread %d\n", totalTiFlash, totalTiKV, threadId)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -403,7 +404,7 @@ func main() {
 			for i := 0; i < *thread; i++ {
 				fmt.Println("Main: Starting worker", i)
 				wg.Add(1)
-				go verify(&wg, "rpt_sdb_account_agent_trans_d2")
+				go verify(&wg, "rpt_sdb_account_agent_trans_d2", i)
 			}
 			fmt.Println("Main: Waiting for workers to finish")
 			wg.Wait()
@@ -433,7 +434,7 @@ func main() {
 			for i := 0; i < *thread; i++ {
 				fmt.Println("Main: Starting worker", i)
 				wg.Add(1)
-				go verify(&wg, "rpt_sdb_account_agent_trans_d")
+				go verify(&wg, "rpt_sdb_account_agent_trans_d", i)
 			}
 			fmt.Println("Main: Waiting for workers to finish")
 			wg.Wait()
