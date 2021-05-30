@@ -169,6 +169,36 @@ func updateTable(wg *sync.WaitGroup) {
 	}
 }
 
+func getRow() string {
+	return fmt.Sprintf("('%s','%s','%s','%s','%s',%d,%d,%f,%d,%d,%d,%d,%d,%f,%d,%f,%d,%f,%f,%d,%d,%d,'%s','%s','%s','%s') ",
+		randString(512),
+		randString(512),
+		randString(512),
+		randString(1000),
+		randString(1000),
+		randBigInt(),
+		randInt(10000),
+		randDouble(),
+		randBigInt(),
+		randBigInt(),
+		randBigInt(),
+		randBigInt(),
+		randBigInt(),
+		randDouble(),
+		randBigInt(),
+		randDouble(),
+		randBigInt(),
+		randDouble(),
+		randDouble(),
+		randBigInt(),
+		randBigInt(),
+		randBigInt(),
+		randString(100),
+		randString(100),
+		randString(100),
+		randString(100))
+}
+
 func createStableTable(db *sql.DB) {
 	_, err := db.Query("Drop table if exists rpt_sdb_account_agent_trans_d2")
 	if err != nil {
@@ -180,33 +210,7 @@ func createStableTable(db *sql.DB) {
 	}
 	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d2 VALUES ")
 	for i := 0; i < 600000; i += 1 {
-		v := fmt.Sprintf("('%s','%s','%s','%s','%s',%d,%d,%f,%d,%d,%d,%d,%d,%f,%d,%f,%d,%f,%f,%d,%d,%d,'%s','%s','%s','%s') ",
-			randString(512),
-			randString(512),
-			randString(512),
-			randString(1000),
-			randString(1000),
-			randBigInt(),
-			randInt(10000),
-			randDouble(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randDouble(),
-			randBigInt(),
-			randDouble(),
-			randBigInt(),
-			randDouble(),
-			randDouble(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randString(100),
-			randString(100),
-			randString(100),
-			randString(100))
+		v := getRow()
 		err := loader.InsertValue([]string{v})
 		if err != nil {
 			panic(err)
@@ -218,6 +222,76 @@ func createStableTable(db *sql.DB) {
 	}
 }
 
+// func stableUpdateTable(wg *sync.WaitGroup) {
+// 	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
+// 	//db, err := sql.Open("mysql", "root@tcp(127.0.0.1:8000)/test")
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	defer db.Close()
+// 	defer wg.Done()
+// 	for {
+// 		updateSql := fmt.Sprintf("update rpt_sdb_account_agent_trans_d2 set agent_name='%s',"+
+// 			"channel='%s',"+
+// 			"sub_channel='%s',"+
+// 			"advertiser_id='%s',"+
+// 			"account='%s',"+
+// 			"shows=%d,"+
+// 			"click=%d,"+
+// 			"cost=%f,"+
+// 			"landing_uv=%d,"+
+// 			"free_insur_user_num=%d,"+
+// 			"submit_user_num=%d,"+
+// 			"succ_user_num=%d,"+
+// 			"succ_order_num=%d,"+
+// 			"channel_origin=%f,"+
+// 			"new_user_num=%d,"+
+// 			"new_channel_origin=%f,"+
+// 			"repay_user_num=%d,"+
+// 			"repay_origin=%f,"+
+// 			"origin=%f,"+
+// 			"refund_order_num=%d,"+
+// 			"hand_pay_user_num=%d,"+
+// 			"follow_user_num=%d,"+
+// 			"types='%s',"+
+// 			"biz='%s',"+
+// 			"media_code='%s',"+
+// 			"dt='%s' "+
+// 			"where click=%d limit 100",
+// 			randString(512),
+// 			randString(512),
+// 			randString(512),
+// 			randString(1000),
+// 			randString(1000),
+// 			randBigInt(),
+// 			randInt(10000),
+// 			randDouble(),
+// 			randBigInt(),
+// 			randBigInt(),
+// 			randBigInt(),
+// 			randBigInt(),
+// 			randBigInt(),
+// 			randDouble(),
+// 			randBigInt(),
+// 			randDouble(),
+// 			randBigInt(),
+// 			randDouble(),
+// 			randDouble(),
+// 			randBigInt(),
+// 			randBigInt(),
+// 			randBigInt(),
+// 			randString(100),
+// 			randString(100),
+// 			randString(100),
+// 			randString(100),
+// 			randInt(10000))
+// 		_, err = db.Exec(updateSql)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+// 	}
+// }
+
 func stableUpdateTable(wg *sync.WaitGroup) {
 	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
 	//db, err := sql.Open("mysql", "root@tcp(127.0.0.1:8000)/test")
@@ -226,62 +300,19 @@ func stableUpdateTable(wg *sync.WaitGroup) {
 	}
 	defer db.Close()
 	defer wg.Done()
+	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d2 VALUES ")
 	for {
-		updateSql := fmt.Sprintf("update rpt_sdb_account_agent_trans_d2 set agent_name='%s',"+
-			"channel='%s',"+
-			"sub_channel='%s',"+
-			"advertiser_id='%s',"+
-			"account='%s',"+
-			"shows=%d,"+
-			"click=%d,"+
-			"cost=%f,"+
-			"landing_uv=%d,"+
-			"free_insur_user_num=%d,"+
-			"submit_user_num=%d,"+
-			"succ_user_num=%d,"+
-			"succ_order_num=%d,"+
-			"channel_origin=%f,"+
-			"new_user_num=%d,"+
-			"new_channel_origin=%f,"+
-			"repay_user_num=%d,"+
-			"repay_origin=%f,"+
-			"origin=%f,"+
-			"refund_order_num=%d,"+
-			"hand_pay_user_num=%d,"+
-			"follow_user_num=%d,"+
-			"types='%s',"+
-			"biz='%s',"+
-			"media_code='%s',"+
-			"dt='%s' "+
-			"where click=%d limit 100",
-			randString(512),
-			randString(512),
-			randString(512),
-			randString(1000),
-			randString(1000),
-			randBigInt(),
-			randInt(10000),
-			randDouble(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randDouble(),
-			randBigInt(),
-			randDouble(),
-			randBigInt(),
-			randDouble(),
-			randDouble(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randString(100),
-			randString(100),
-			randString(100),
-			randString(100),
-			randInt(10000))
-		_, err = db.Exec(updateSql)
+		insertNum := rand.Intn(500)
+		deleteNum := rand.Intn(500)
+		for i := 0; i < insertNum; i += 1 {
+			v := getRow()
+			err := loader.InsertValue([]string{v})
+			if err != nil {
+				panic(err)
+			}
+		}
+		loader.Flush()
+		_, err := db.Exec(fmt.Sprintf("DELETE FROM rpt_sdb_account_agent_trans_d2 limit %d", deleteNum))
 		if err != nil {
 			panic(err)
 		}
