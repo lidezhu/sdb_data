@@ -301,20 +301,22 @@ func stableUpdateTable(wg *sync.WaitGroup) {
 	defer db.Close()
 	defer wg.Done()
 	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d2 VALUES ")
-	for step := 0; step < 100; step += 1 {
+	for {
 		insertNum := rand.Intn(500)
 		deleteNum := rand.Intn(500)
 		for i := 0; i < insertNum; i += 1 {
 			v := getRow()
 			err := loader.InsertValue([]string{v})
 			if err != nil {
-				panic(err)
+				log.Warn(err)
+				time.Sleep(1 * time.Second)
 			}
 		}
 		loader.Flush()
 		_, err := db.Exec(fmt.Sprintf("DELETE FROM rpt_sdb_account_agent_trans_d2 limit %d", deleteNum))
 		if err != nil {
-			panic(err)
+			log.Warn(err)
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -401,19 +403,18 @@ func main() {
 	if *stable {
 		if *update {
 			fmt.Println("Run stable workload")
-			for {
-				createStableTable(db)
-				var wg sync.WaitGroup
 
-				for i := 0; i < *thread; i++ {
-					fmt.Println("Main: Starting worker", i)
-					wg.Add(1)
-					go stableUpdateTable(&wg)
-				}
-				fmt.Println("Main: Waiting for workers to finish")
-				wg.Wait()
-				fmt.Println("Main: Completed")
+			createStableTable(db)
+			var wg sync.WaitGroup
+
+			for i := 0; i < *thread; i++ {
+				fmt.Println("Main: Starting worker", i)
+				wg.Add(1)
+				go stableUpdateTable(&wg)
 			}
+			fmt.Println("Main: Waiting for workers to finish")
+			wg.Wait()
+			fmt.Println("Main: Completed")
 		} else {
 			fmt.Println("begin to verify stable workload")
 			var wg sync.WaitGroup
