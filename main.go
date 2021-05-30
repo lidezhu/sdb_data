@@ -17,7 +17,7 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-var address = flag.String("address", "172.16.5.59:8086", "mysql port")
+var address = flag.String("address", "127.0.0.1:8086", "mysql port")
 var thread = flag.Int("thread", 8, "update thread")
 var update = flag.Bool("update", true, "update or verify the data")
 var replica = flag.Int("replica", 2, "tiflash replica num")
