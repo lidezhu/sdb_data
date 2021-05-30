@@ -344,6 +344,12 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 			panic(err)
 		}
 
+		if threadId%3 == 0 {
+			interval := rand.Intn(5000)
+			fmt.Printf("thread %d sleep %d millisecond", threadId, interval)
+			time.Sleep(time.Duration(interval) * time.Millisecond)
+		}
+
 		var totalTiFlash = -1
 		var totalTiKV = -1
 		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
