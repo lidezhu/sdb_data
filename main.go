@@ -23,6 +23,7 @@ var thread = flag.Int("thread", 32, "update thread")
 var update = flag.Bool("update", true, "update or verify the data")
 var replica = flag.Int("replica", 2, "tiflash replica num")
 var schema = flag.String("schema", "", "schema file path")
+var stable = flag.Bool("stable", false, "run stable workload")
 
 // varchar(512)
 // varchar(1000)
@@ -43,6 +44,10 @@ func randString(maxLength int) string {
 
 func randBigInt() int64 {
 	return rand.Int63()
+}
+
+func randInt(maxValue int) int {
+	return rand.Intn(maxValue)
 }
 
 func randDouble() float64 {
@@ -137,7 +142,7 @@ func updateTable(wg *sync.WaitGroup) {
 			randString(1000),
 			randString(1000),
 			randBigInt(),
-			randBigInt(),
+			randInt(10000),
 			randDouble(),
 			randBigInt(),
 			randBigInt(),
@@ -158,6 +163,125 @@ func updateTable(wg *sync.WaitGroup) {
 			randString(100),
 			randString(100))
 		err := loader.InsertValue([]string{v})
+		if err != nil {
+			panic(err)
+		}
+	}
+}
+
+func createStableTable(db *sql.DB) {
+	_, err := db.Query("Drop table if exists rpt_sdb_account_agent_trans_d2")
+	if err != nil {
+		panic(err)
+	}
+	_, err = db.Query("Create table rpt_sdb_account_agent_trans_d2 like rpt_sdb_account_agent_trans_d")
+	if err != nil {
+		panic(err)
+	}
+	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d2 ")
+	for i := 0; i < 600000; i += 1 {
+		v := fmt.Sprintf("('%s','%s','%s','%s','%s',%d,%d,%f,%d,%d,%d,%d,%d,%f,%d,%f,%d,%f,%f,%d,%d,%d,'%s','%s','%s','%s') WHERE ",
+			randString(512),
+			randString(512),
+			randString(512),
+			randString(1000),
+			randString(1000),
+			randBigInt(),
+			randInt(10000),
+			randDouble(),
+			randBigInt(),
+			randBigInt(),
+			randBigInt(),
+			randBigInt(),
+			randBigInt(),
+			randDouble(),
+			randBigInt(),
+			randDouble(),
+			randBigInt(),
+			randDouble(),
+			randDouble(),
+			randBigInt(),
+			randBigInt(),
+			randBigInt(),
+			randString(100),
+			randString(100),
+			randString(100),
+			randString(100))
+		err := loader.InsertValue([]string{v})
+		if err != nil {
+			panic(err)
+		}
+	}
+	err = loader.Flush()
+	if err != nil {
+		panic(err)
+	}
+}
+
+func stableUpdateTable(wg *sync.WaitGroup) {
+	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
+	//db, err := sql.Open("mysql", "root@tcp(127.0.0.1:8000)/test")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	defer wg.Done()
+	for {
+		updateSql := fmt.Sprintf("update rpt_sdb_account_agent_trans_d2 set agent_name='%s',"+
+			"channel='%s',"+
+			"sub_channel='%s"+
+			"advertiser_id='%s'"+
+			"account='%s'"+
+			"shows=%d"+
+			"click=%d"+
+			"cost=%f"+
+			"landing_uv=%d"+
+			"free_insur_user_num=%d"+
+			"submit_user_num=%d"+
+			"succ_user_num=%d"+
+			"succ_order_num=%d"+
+			"channel_origin=%f"+
+			"new_user_num=%d"+
+			"new_channel_origin=%f"+
+			"repay_user_num=%d"+
+			"repay_origin=%f"+
+			"origin=%f"+
+			"refund_order_num=%d"+
+			"hand_pay_user_num=%d"+
+			"follow_user_num=%d"+
+			"types='%s'"+
+			"biz='%s'"+
+			"media_code='%s'"+
+			"dt='%s'"+
+			"where click=%d",
+			randString(512),
+			randString(512),
+			randString(512),
+			randString(1000),
+			randString(1000),
+			randBigInt(),
+			randInt(10000),
+			randDouble(),
+			randBigInt(),
+			randBigInt(),
+			randBigInt(),
+			randBigInt(),
+			randBigInt(),
+			randDouble(),
+			randBigInt(),
+			randDouble(),
+			randBigInt(),
+			randDouble(),
+			randDouble(),
+			randBigInt(),
+			randBigInt(),
+			randBigInt(),
+			randString(100),
+			randString(100),
+			randString(100),
+			randString(100),
+			randInt(10000))
+		_, err = db.Query(updateSql)
 		if err != nil {
 			panic(err)
 		}
@@ -227,33 +351,48 @@ func main() {
 	defer db.Close()
 	db.SetConnMaxLifetime(time.Minute * 30)
 
-	if *update {
-		err = createTable(db)
-		if err != nil {
-			panic(err)
-		}
-
+	if *stable {
+		fmt.Println("Run stable workload")
+		createStableTable(db)
 		var wg sync.WaitGroup
 
 		for i := 0; i < *thread; i++ {
 			fmt.Println("Main: Starting worker", i)
 			wg.Add(1)
-			go updateTable(&wg)
+			go stableUpdateTable(&wg)
 		}
 		fmt.Println("Main: Waiting for workers to finish")
 		wg.Wait()
 		fmt.Println("Main: Completed")
 	} else {
-		fmt.Println("begin to verify")
-		var wg sync.WaitGroup
+		if *update {
+			err = createTable(db)
+			if err != nil {
+				panic(err)
+			}
 
-		for i := 0; i < *thread; i++ {
-			fmt.Println("Main: Starting worker", i)
-			wg.Add(1)
-			go verify(&wg)
+			var wg sync.WaitGroup
+
+			for i := 0; i < *thread; i++ {
+				fmt.Println("Main: Starting worker", i)
+				wg.Add(1)
+				go updateTable(&wg)
+			}
+			fmt.Println("Main: Waiting for workers to finish")
+			wg.Wait()
+			fmt.Println("Main: Completed")
+		} else {
+			fmt.Println("begin to verify")
+			var wg sync.WaitGroup
+
+			for i := 0; i < *thread; i++ {
+				fmt.Println("Main: Starting worker", i)
+				wg.Add(1)
+				go verify(&wg)
+			}
+			fmt.Println("Main: Waiting for workers to finish")
+			wg.Wait()
+			fmt.Println("Main: Completed")
 		}
-		fmt.Println("Main: Waiting for workers to finish")
-		wg.Wait()
-		fmt.Println("Main: Completed")
 	}
 }
