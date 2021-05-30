@@ -288,7 +288,7 @@ func stableUpdateTable(wg *sync.WaitGroup) {
 	}
 }
 
-func verify(wg *sync.WaitGroup) {
+func verify(wg *sync.WaitGroup, tableName string) {
 	defer wg.Done()
 	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
 	if err != nil {
@@ -301,7 +301,7 @@ func verify(wg *sync.WaitGroup) {
 		panic(err)
 	}
 
-	query := "select count(*) from rpt_sdb_account_agent_trans_d"
+	query := fmt.Sprintf("select count(*) from %s", tableName)
 	for {
 		tx, err := db.Begin()
 		if err != nil {
@@ -352,18 +352,32 @@ func main() {
 	db.SetConnMaxLifetime(time.Minute * 30)
 
 	if *stable {
-		fmt.Println("Run stable workload")
-		// createStableTable(db)
-		var wg sync.WaitGroup
+		if *update {
+			fmt.Println("Run stable workload")
+			// createStableTable(db)
+			var wg sync.WaitGroup
 
-		for i := 0; i < *thread; i++ {
-			fmt.Println("Main: Starting worker", i)
-			wg.Add(1)
-			go stableUpdateTable(&wg)
+			for i := 0; i < *thread; i++ {
+				fmt.Println("Main: Starting worker", i)
+				wg.Add(1)
+				go stableUpdateTable(&wg)
+			}
+			fmt.Println("Main: Waiting for workers to finish")
+			wg.Wait()
+			fmt.Println("Main: Completed")
+		} else {
+			fmt.Println("begin to verify stable workload")
+			var wg sync.WaitGroup
+
+			for i := 0; i < *thread; i++ {
+				fmt.Println("Main: Starting worker", i)
+				wg.Add(1)
+				go verify(&wg, "rpt_sdb_account_agent_trans_d2")
+			}
+			fmt.Println("Main: Waiting for workers to finish")
+			wg.Wait()
+			fmt.Println("Main: Completed")
 		}
-		fmt.Println("Main: Waiting for workers to finish")
-		wg.Wait()
-		fmt.Println("Main: Completed")
 	} else {
 		if *update {
 			err = createTable(db)
@@ -388,7 +402,7 @@ func main() {
 			for i := 0; i < *thread; i++ {
 				fmt.Println("Main: Starting worker", i)
 				wg.Add(1)
-				go verify(&wg)
+				go verify(&wg, "rpt_sdb_account_agent_trans_d")
 			}
 			fmt.Println("Main: Waiting for workers to finish")
 			wg.Wait()
