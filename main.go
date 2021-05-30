@@ -354,7 +354,7 @@ func main() {
 	if *stable {
 		if *update {
 			fmt.Println("Run stable workload")
-			// createStableTable(db)
+			createStableTable(db)
 			var wg sync.WaitGroup
 
 			for i := 0; i < *thread; i++ {
