@@ -176,10 +176,10 @@ func verify(wg *sync.WaitGroup) {
 		panic(err)
 	}
 
-	_, err = db.Query("SET @@tidb_multi_statement_mode='ON'")
-	if err != nil {
-		panic(err)
-	}
+	// _, err = db.Query("SET @@tidb_multi_statement_mode='ON'")
+	// if err != nil {
+	// 	panic(err)
+	// }
 
 	query1 := "set @@session.tidb_isolation_read_engines='tiflash'; select count(*) from rpt_sdb_account_agent_trans_d"
 	query2 := "set @@session.tidb_isolation_read_engines='tikv'; select count(*) from rpt_sdb_account_agent_trans_d"
