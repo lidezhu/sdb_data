@@ -178,7 +178,7 @@ func createStableTable(db *sql.DB) {
 	if err != nil {
 		panic(err)
 	}
-	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d2 ")
+	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d2 VALUES ")
 	for i := 0; i < 600000; i += 1 {
 		v := fmt.Sprintf("('%s','%s','%s','%s','%s',%d,%d,%f,%d,%d,%d,%d,%d,%f,%d,%f,%d,%f,%f,%d,%d,%d,'%s','%s','%s','%s') WHERE ",
 			randString(512),
