@@ -351,17 +351,20 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 			log.Warn(err)
 			meetError = true
 		}
-		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
-		if err != nil {
-			panic(err)
+		if !meetError {
+			_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
+			if err != nil {
+				panic(err)
+			}
+			err = tx.QueryRow(query).Scan(&totalTiKV)
+			if err != nil {
+				tx.Rollback()
+				log.Warn(err)
+				meetError = true
+			}
+			tx.Commit()
 		}
-		err = tx.QueryRow(query).Scan(&totalTiKV)
-		if err != nil {
-			tx.Rollback()
-			log.Warn(err)
-			meetError = true
-		}
-		tx.Commit()
+
 		if !meetError && totalTiFlash != totalTiKV {
 			fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d\n", totalTiFlash, totalTiKV, threadId)
 			panic("error")
