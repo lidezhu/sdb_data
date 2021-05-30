@@ -18,7 +18,7 @@ func init() {
 }
 
 var address = flag.String("address", "127.0.0.1:8086", "mysql port")
-var thread = flag.Int("thread", 8, "update thread")
+var thread = flag.Int("thread", 32, "update thread")
 var update = flag.Bool("update", true, "update or verify the data")
 var replica = flag.Int("replica", 2, "tiflash replica num")
 var schema = flag.String("schema", "", "schema file path")
@@ -48,7 +48,7 @@ func randDouble() float64 {
 	return rand.Float64()
 }
 
-const maxBatchCount = 1024
+const maxBatchCount = 512
 
 type SQLBatchLoader struct {
 	insertHint string
@@ -119,7 +119,13 @@ func createTable(db *sql.DB) error {
 	return nil
 }
 
-func updateTable(db *sql.DB, wg *sync.WaitGroup) {
+func updateTable(wg *sync.WaitGroup) {
+	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
+	//db, err := sql.Open("mysql", "root@tcp(127.0.0.1:8000)/test")
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
 	defer wg.Done()
 	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d VALUES ")
 	for {
@@ -163,6 +169,7 @@ func verify(wg *sync.WaitGroup) {
 	if err != nil {
 		panic(err)
 	}
+	defer db.Close()
 	// disable batch cop
 	_, err = db.Query("set @@tidb_allow_batch_cop = 0;")
 	if err != nil {
@@ -222,7 +229,7 @@ func main() {
 		for i := 0; i < *thread; i++ {
 			fmt.Println("Main: Starting worker", i)
 			wg.Add(1)
-			go updateTable(db, &wg)
+			go updateTable(&wg)
 		}
 		fmt.Println("Main: Waiting for workers to finish")
 		wg.Wait()
