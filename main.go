@@ -11,6 +11,7 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/prometheus/common/log"
 )
 
 func init() {
@@ -190,7 +191,10 @@ func verify(wg *sync.WaitGroup) {
 		}
 		err = tx.QueryRow(query).Scan(&totalTiFlash)
 		if err != nil {
-			panic(err)
+			tx.Rollback()
+			log.Warn(err)
+			time.Sleep(1 * time.Second)
+			continue
 		}
 		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
 		if err != nil {
@@ -198,7 +202,10 @@ func verify(wg *sync.WaitGroup) {
 		}
 		err = tx.QueryRow(query).Scan(&totalTiKV)
 		if err != nil {
-			panic(err)
+			tx.Rollback()
+			log.Warn(err)
+			time.Sleep(1 * time.Second)
+			continue
 		}
 		tx.Commit()
 		fmt.Printf("tiflash result %d, tikv result %d\n", totalTiFlash, totalTiKV)
