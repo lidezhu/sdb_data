@@ -332,7 +332,7 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 	}
 	defer db.Close()
 	// disable batch cop
-	_, err = db.Query("set @@tidb_allow_batch_cop = 0;")
+	_, err = db.Exec("set @@tidb_allow_batch_cop = 0;")
 	if err != nil {
 		panic(err)
 	}
