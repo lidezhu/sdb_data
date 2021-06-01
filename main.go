@@ -19,8 +19,8 @@ func init() {
 }
 
 var address = flag.String("address", "127.0.0.1:8086", "mysql port")
-var thread = flag.Int("thread", 32, "update thread")
-var update = flag.Bool("update", true, "update or verify the data")
+var update_thread_num = flag.Int("update-thread", 16, "update thread")
+var verify_thread_num = flag.Int("verify-thread", 8, "verify thread")
 var replica = flag.Int("replica", 2, "tiflash replica num")
 var schema = flag.String("schema", "", "schema file path")
 var stable = flag.Bool("stable", false, "run stable workload")
@@ -204,6 +204,9 @@ func createStableTable(db *sql.DB) {
 	if err != nil {
 		panic(err)
 	}
+	// create rpt_sdb_account_agent_trans_d if need
+	createTable(db)
+
 	_, err = db.Query("Create table rpt_sdb_account_agent_trans_d2 like rpt_sdb_account_agent_trans_d")
 	if err != nil {
 		panic(err)
@@ -401,62 +404,49 @@ func main() {
 	db.SetConnMaxLifetime(time.Minute * 30)
 
 	if *stable {
-		if *update {
-			fmt.Println("Run stable workload")
+		fmt.Println("Run stable workload")
+		var wg sync.WaitGroup
 
-			createStableTable(db)
-			var wg sync.WaitGroup
-
-			for i := 0; i < *thread; i++ {
-				fmt.Println("Main: Starting worker", i)
-				wg.Add(1)
-				go stableUpdateTable(&wg)
-			}
-			fmt.Println("Main: Waiting for workers to finish")
-			wg.Wait()
-			fmt.Println("Main: Completed")
-		} else {
-			fmt.Println("begin to verify stable workload")
-			var wg sync.WaitGroup
-
-			for i := 0; i < *thread; i++ {
-				fmt.Println("Main: Starting worker", i)
-				wg.Add(1)
-				go verify(&wg, "rpt_sdb_account_agent_trans_d2", i)
-			}
-			fmt.Println("Main: Waiting for workers to finish")
-			wg.Wait()
-			fmt.Println("Main: Completed")
+		for i := 0; i < *verify_thread_num; i++ {
+			fmt.Println("Main: Starting verify worker", i)
+			wg.Add(1)
+			go verify(&wg, "rpt_sdb_account_agent_trans_d2", i)
 		}
+		createStableTable(db)
+
+		for i := 0; i < *update_thread_num; i++ {
+			fmt.Println("Main: Starting update worker", i)
+			wg.Add(1)
+			go stableUpdateTable(&wg)
+		}
+
+		fmt.Println("Main: Waiting for workers to finish")
+		wg.Wait()
+		fmt.Println("Main: Completed")
 	} else {
-		if *update {
-			err = createTable(db)
-			if err != nil {
-				panic(err)
-			}
-
-			var wg sync.WaitGroup
-
-			for i := 0; i < *thread; i++ {
-				fmt.Println("Main: Starting worker", i)
-				wg.Add(1)
-				go updateTable(&wg)
-			}
-			fmt.Println("Main: Waiting for workers to finish")
-			wg.Wait()
-			fmt.Println("Main: Completed")
-		} else {
-			fmt.Println("begin to verify")
-			var wg sync.WaitGroup
-
-			for i := 0; i < *thread; i++ {
-				fmt.Println("Main: Starting worker", i)
-				wg.Add(1)
-				go verify(&wg, "rpt_sdb_account_agent_trans_d", i)
-			}
-			fmt.Println("Main: Waiting for workers to finish")
-			wg.Wait()
-			fmt.Println("Main: Completed")
+		fmt.Println("Run insert workload")
+		err = createTable(db)
+		if err != nil {
+			panic(err)
 		}
+
+		var wg sync.WaitGroup
+
+		for i := 0; i < *verify_thread_num; i++ {
+			fmt.Println("Main: Starting verify worker", i)
+			wg.Add(1)
+			go verify(&wg, "rpt_sdb_account_agent_trans_d", i)
+		}
+
+		for i := 0; i < *update_thread_num; i++ {
+			fmt.Println("Main: Starting upate worker", i)
+			wg.Add(1)
+			go updateTable(&wg)
+		}
+
+		fmt.Println("Main: Waiting for workers to finish")
+		wg.Wait()
+		fmt.Println("Main: Completed")
+
 	}
 }
