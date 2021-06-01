@@ -384,6 +384,7 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 
 		if !meetError && totalTiFlash != totalTiKV {
 			fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d tso %d\n", totalTiFlash, totalTiKV, threadId, tso)
+			fmt.Println(time.Now().UTC())
 			panic("error")
 		} else {
 			fmt.Printf("tiflash result %d, tikv result %d thread %d tso %d\n", totalTiFlash, totalTiKV, threadId, tso)
