@@ -24,6 +24,7 @@ var verify_thread_num = flag.Int("verify-thread", 8, "verify thread")
 var replica = flag.Int("replica", 2, "tiflash replica num")
 var schema = flag.String("schema", "", "schema file path")
 var stable = flag.Bool("stable", false, "run stable workload")
+var recreate_stable_table = flag.Bool("recreate-stable", false, "recreate stable table")
 
 // varchar(512)
 // varchar(1000)
@@ -413,7 +414,9 @@ func main() {
 			wg.Add(1)
 			go verify(&wg, "rpt_sdb_account_agent_trans_d2", i)
 		}
-		createStableTable(db)
+		if *recreate_stable_table {
+			createStableTable(db)
+		}
 
 		for i := 0; i < *update_thread_num; i++ {
 			fmt.Println("Main: Starting update worker", i)
