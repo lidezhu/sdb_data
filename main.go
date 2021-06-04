@@ -255,6 +255,46 @@ func stableUpdateTable(wg *sync.WaitGroup) {
 	}
 }
 
+func checkConsistency(tx *sql.Tx, threadId int, tso uint64, query string) bool {
+	var totalTiFlash = -1
+	var totalTiKV = -1
+	var meetError = false
+	_, err := tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
+	if err != nil {
+		log.Warn(err)
+	}
+	err = tx.QueryRow(query).Scan(&totalTiKV)
+	if err != nil {
+		tx.Rollback()
+		log.Warn(err)
+		meetError = true
+	}
+
+	if !meetError {
+		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
+		if err != nil {
+			log.Warn(err)
+		}
+		err = tx.QueryRow(query).Scan(&totalTiFlash)
+		if err != nil {
+			tx.Rollback()
+			log.Warn(err)
+			meetError = true
+		}
+	}
+
+	if !meetError && totalTiFlash != totalTiKV {
+		fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d tso %d.\n", totalTiFlash, totalTiKV, threadId, tso)
+		return false
+	} else {
+		fmt.Printf("tiflash result %d, tikv result %d thread %d tso %d\n", totalTiFlash, totalTiKV, threadId, tso)
+		if !meetError {
+			tx.Commit()
+		}
+	}
+	return true
+}
+
 func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 	defer wg.Done()
 	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
@@ -270,12 +310,11 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 
 	query := fmt.Sprintf("select count(*) from %s", tableName)
 	for {
-		meetError := false
 		tx, err := db.Begin()
 		if err != nil {
 			panic(err)
 		}
-		var tso int
+		var tso uint64
 		if err = tx.QueryRow("select @@tidb_current_ts").Scan(&tso); err != nil {
 			panic(err)
 		}
@@ -286,74 +325,12 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 			time.Sleep(time.Duration(interval) * time.Millisecond)
 		}
 
-		var totalTiFlash = -1
-		var totalTiKV = -1
-		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
-		if err != nil {
-			log.Warn(err)
-		}
-		err = tx.QueryRow(query).Scan(&totalTiKV)
-		if err != nil {
-			tx.Rollback()
-			log.Warn(err)
-			meetError = true
-		}
-
-		if !meetError {
-			_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
-			if err != nil {
-				log.Warn(err)
-			}
-			err = tx.QueryRow(query).Scan(&totalTiFlash)
-			if err != nil {
-				tx.Rollback()
-				log.Warn(err)
-				meetError = true
-			}
-		}
-
-		if !meetError && totalTiFlash != totalTiKV {
-			fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d tso %d. Try select again.\n", totalTiFlash, totalTiKV, threadId, tso)
-			for {
-				var totalTiFlash2 = -1
-				var totalTiKV2 = -1
-				_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
-				if err != nil {
-					log.Warn(err)
-				}
-				err = tx.QueryRow(query).Scan(&totalTiKV2)
-				if err != nil {
-					tx.Rollback()
-					log.Warn(err)
-					meetError = true
-				}
-
-				if !meetError {
-					_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
-					if err != nil {
-						log.Warn(err)
-					}
-					err = tx.QueryRow(query).Scan(&totalTiFlash2)
-					if err != nil {
-						tx.Rollback()
-						log.Warn(err)
-						meetError = true
-					}
-				}
-
-				if !meetError {
-					fmt.Printf("select again. tiflash result %d, tikv result %d is not consistent thread %d tso %d. Try select again.\n", totalTiFlash2, totalTiKV2, threadId, tso)
-					break
-				}
-			}
+		correct := checkConsistency(tx, threadId, tso, query)
+		if !correct {
+			fmt.Printf("thread %d meet wrong result, try to check again\n", threadId)
+			checkConsistency(tx, threadId, tso, query)
 			fmt.Println(time.Now().UTC())
 			panic("test meet error")
-		} else {
-			fmt.Printf("tiflash result %d, tikv result %d thread %d tso %d\n", totalTiFlash, totalTiKV, threadId, tso)
-		}
-
-		if !meetError {
-			tx.Commit()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
