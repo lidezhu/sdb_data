@@ -25,6 +25,7 @@ var replica = flag.Int("replica", 2, "tiflash replica num")
 var schema = flag.String("schema", "", "schema file path")
 var stable = flag.Bool("stable", false, "run stable workload")
 var recreate_stable_table = flag.Bool("recreate-stable", false, "recreate stable table")
+var enable_batch_cop = flag.Bool("enable-batch-cop", false, "enable batch cop")
 
 // varchar(512)
 // varchar(1000)
@@ -302,10 +303,14 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 		panic(err)
 	}
 	defer db.Close()
-	// disable batch cop
-	_, err = db.Exec("set @@tidb_allow_batch_cop = 0;")
-	if err != nil {
-		panic(err)
+
+	if !*enable_batch_cop {
+		fmt.Println("disable batch cop")
+		// disable batch cop
+		_, err = db.Exec("set @@tidb_allow_batch_cop = 0;")
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	query := fmt.Sprintf("select count(*) from %s", tableName)
