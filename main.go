@@ -290,7 +290,7 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 		var totalTiKV = -1
 		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
 		if err != nil {
-			panic(err)
+			log.Warn(err)
 		}
 		err = tx.QueryRow(query).Scan(&totalTiKV)
 		if err != nil {
@@ -302,7 +302,7 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 		if !meetError {
 			_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
 			if err != nil {
-				panic(err)
+				log.Warn(err)
 			}
 			err = tx.QueryRow(query).Scan(&totalTiFlash)
 			if err != nil {
@@ -310,15 +310,50 @@ func verify(wg *sync.WaitGroup, tableName string, threadId int) {
 				log.Warn(err)
 				meetError = true
 			}
-			tx.Commit()
 		}
 
 		if !meetError && totalTiFlash != totalTiKV {
-			fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d tso %d\n", totalTiFlash, totalTiKV, threadId, tso)
+			fmt.Printf("tiflash result %d, tikv result %d is not consistent thread %d tso %d. Try select again.\n", totalTiFlash, totalTiKV, threadId, tso)
+			for {
+				var totalTiFlash2 = -1
+				var totalTiKV2 = -1
+				_, err = tx.Query("set @@session.tidb_isolation_read_engines='tikv'")
+				if err != nil {
+					log.Warn(err)
+				}
+				err = tx.QueryRow(query).Scan(&totalTiKV2)
+				if err != nil {
+					tx.Rollback()
+					log.Warn(err)
+					meetError = true
+				}
+
+				if !meetError {
+					_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
+					if err != nil {
+						log.Warn(err)
+					}
+					err = tx.QueryRow(query).Scan(&totalTiFlash2)
+					if err != nil {
+						tx.Rollback()
+						log.Warn(err)
+						meetError = true
+					}
+				}
+
+				if !meetError {
+					fmt.Printf("select again. tiflash result %d, tikv result %d is not consistent thread %d tso %d. Try select again.\n", totalTiFlash2, totalTiKV2, threadId, tso)
+					break
+				}
+			}
 			fmt.Println(time.Now().UTC())
-			panic("error")
+			panic("test meet error")
 		} else {
 			fmt.Printf("tiflash result %d, tikv result %d thread %d tso %d\n", totalTiFlash, totalTiKV, threadId, tso)
+		}
+
+		if !meetError {
+			tx.Commit()
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
