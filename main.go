@@ -25,6 +25,7 @@ var replica = flag.Int("replica", 2, "tiflash replica num")
 var schema = flag.String("schema", "", "schema file path")
 var stable = flag.Bool("stable", false, "run stable workload")
 var recreate_stable_table = flag.Bool("recreate-stable", false, "recreate stable table")
+var insert_batch_count = flag.Int("batch-count", 50, "insert batch count")
 
 // varchar(512)
 // varchar(1000)
@@ -55,8 +56,6 @@ func randDouble() float64 {
 	return rand.Float64()
 }
 
-const maxBatchCount = 512
-
 type SQLBatchLoader struct {
 	insertHint string
 	db         *sql.DB
@@ -85,7 +84,7 @@ func (b *SQLBatchLoader) InsertValue(query []string) error {
 
 	b.count++
 
-	if b.count >= maxBatchCount {
+	if b.count >= *insert_batch_count {
 		return b.Flush()
 	}
 
