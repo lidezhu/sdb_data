@@ -109,24 +109,26 @@ func (b *SQLBatchLoader) Flush() error {
 }
 
 func createTable(db *sql.DB) error {
-	data, err := ioutil.ReadFile(*schema)
-	if err != nil {
-		return err
-	}
-	_, err = db.Query(string(data))
-	if err != nil {
+	if _, err := db.Query(fmt.Sprintf("drop table rpt_sdb_account_agent_trans_d if exists")); err != nil {
 		return err
 	}
 
-	_, err = db.Query(fmt.Sprintf("alter table rpt_sdb_account_agent_trans_d set tiflash replica %d", *replica))
-	if err != nil {
+	if data, err := ioutil.ReadFile(*schema); err != nil {
+		return err
+	} else {
+		if _, err := db.Query(string(data)); err != nil {
+			return err
+		}
+	}
+
+	if _, err := db.Query(fmt.Sprintf("alter table rpt_sdb_account_agent_trans_d set tiflash replica %d", *replica)); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func updateTable(wg *sync.WaitGroup) {
+func updateTable(wg *sync.WaitGroup, index int) {
 	db, err := sql.Open("mysql", fmt.Sprintf("root@tcp(%s)/test", *address))
 	//db, err := sql.Open("mysql", "root@tcp(127.0.0.1:8000)/test")
 	if err != nil {
@@ -136,36 +138,43 @@ func updateTable(wg *sync.WaitGroup) {
 	defer wg.Done()
 	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d VALUES ")
 	for {
-		v := fmt.Sprintf("('%s','%s','%s','%s','%s',%d,%d,%f,%d,%d,%d,%d,%d,%f,%d,%f,%d,%f,%f,%d,%d,%d,'%s','%s','%s','%s')",
-			randString(512),
-			randString(512),
-			randString(512),
-			randString(1000),
-			randString(1000),
-			randBigInt(),
-			randInt(10000),
-			randDouble(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randDouble(),
-			randBigInt(),
-			randDouble(),
-			randBigInt(),
-			randDouble(),
-			randDouble(),
-			randBigInt(),
-			randBigInt(),
-			randBigInt(),
-			randString(100),
-			randString(100),
-			randString(100),
-			randString(100))
-		err := loader.InsertValue([]string{v})
-		if err != nil {
-			panic(err)
+		for i := 0; i < 10000; i++ {
+			v := fmt.Sprintf("('%s','%s','%s','%s','%s',%d,%d,%f,%d,%d,%d,%d,%d,%f,%d,%f,%d,%f,%f,%d,%d,%d,'%s','%s','%s','%s')",
+				randString(512),
+				randString(512),
+				randString(512),
+				randString(1000),
+				randString(1000),
+				randBigInt(),
+				randInt(10000),
+				randDouble(),
+				randBigInt(),
+				randBigInt(),
+				randBigInt(),
+				randBigInt(),
+				randBigInt(),
+				randDouble(),
+				randBigInt(),
+				randDouble(),
+				randBigInt(),
+				randDouble(),
+				randDouble(),
+				randBigInt(),
+				randBigInt(),
+				randBigInt(),
+				randString(100),
+				randString(100),
+				randString(100),
+				randString(100))
+			err := loader.InsertValue([]string{v})
+			if err != nil {
+				log.Warn(err)
+			}
+		}
+		if index == 0 {
+			if err := createTable(db); err != nil {
+				log.Warn(err)
+			}
 		}
 	}
 }
@@ -280,7 +289,6 @@ func checkConsistency(tx *sql.Tx, threadId int, tso uint64, query string) bool {
 		if err != nil {
 			tx.Rollback()
 			log.Warn(err)
-			panic(err)
 			meetError = true
 		}
 	}
@@ -393,12 +401,11 @@ func main() {
 		for i := 0; i < *update_thread_num; i++ {
 			fmt.Println("Main: Starting upate worker", i)
 			wg.Add(1)
-			go updateTable(&wg)
+			go updateTable(&wg, i)
 		}
 
 		fmt.Println("Main: Waiting for workers to finish")
 		wg.Wait()
 		fmt.Println("Main: Completed")
-
 	}
 }
