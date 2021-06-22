@@ -100,7 +100,7 @@ func (b *SQLBatchLoader) Flush() error {
 
 	_, err := b.db.Exec(b.buf.String())
 	if err != nil {
-		panic(err)
+		log.Warn(err)
 	}
 	b.count = 0
 	b.buf.Reset()
