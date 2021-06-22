@@ -273,12 +273,14 @@ func checkConsistency(tx *sql.Tx, threadId int, tso uint64, query string) bool {
 	if !meetError {
 		_, err = tx.Query("set @@session.tidb_isolation_read_engines='tiflash'")
 		if err != nil {
-			log.Warn(err)
+			//log.Warn(err)
+			panic(err)
 		}
 		err = tx.QueryRow(query).Scan(&totalTiFlash)
 		if err != nil {
 			tx.Rollback()
 			log.Warn(err)
+			panic(err)
 			meetError = true
 		}
 	}
