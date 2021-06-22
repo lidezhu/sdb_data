@@ -109,7 +109,7 @@ func (b *SQLBatchLoader) Flush() error {
 }
 
 func createTable(db *sql.DB) error {
-	if _, err := db.Query(fmt.Sprintf("drop table rpt_sdb_account_agent_trans_d if exists")); err != nil {
+	if _, err := db.Query(fmt.Sprintf("drop table if exists rpt_sdb_account_agent_trans_d")); err != nil {
 		return err
 	}
 
