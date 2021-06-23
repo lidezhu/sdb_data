@@ -138,7 +138,7 @@ func updateTable(wg *sync.WaitGroup, index int) {
 	defer wg.Done()
 	loader := NewSQLBatchLoader(db, "INSERT INTO rpt_sdb_account_agent_trans_d VALUES ")
 	for {
-		for i := 0; i < 500; i++ {
+		for i := 0; i < 5000; i++ {
 			v := fmt.Sprintf("('%s','%s','%s','%s','%s',%d,%d,%f,%d,%d,%d,%d,%d,%f,%d,%f,%d,%f,%f,%d,%d,%d,'%s','%s','%s','%s')",
 				randString(512),
 				randString(512),
